@@ -90,23 +90,28 @@ class Cursor(object):
         charset = conn.charset
         del self.messages[:]
 
-        # TODO: make sure that conn.escape is correct
+        # Ideally we would use %-formatting on byte strings here, however py3k
+        # did away with this functionality. So instead, we represent the query
+        # and escaped args as strs, which contain not actual characters, but
+        # instead raw bytes encoded in the connection charset.
+
+        if isinstance(query, str) and charset != 'latin-1':
+            query = query.encode(charset).decode('latin-1')
 
         if args is not None:
             if isinstance(args, tuple) or isinstance(args, list):
-                escaped_args = tuple(conn.escape(arg) for arg in args)
+                escaped_args = tuple(conn.escape(arg).decode('latin-1') for arg in args)
             elif isinstance(args, dict):
-                escaped_args = dict((key, conn.escape(val)) for (key, val) in args.items())
+                escaped_args = dict((key, conn.escape(val).decode('latin-1'))
+                                    for (key, val) in args.items())
             else:
                 #If it's not a dictionary let's try escaping it anyways.
                 #Worst case it will throw a Value error
-                escaped_args = conn.escape(args)
+                escaped_args = conn.escape(args).decode('latin-1')
 
             query = query % escaped_args
 
-        if isinstance(query, unicode):
-            query = query.encode(charset)
-
+        query = query.encode('latin-1')
         result = 0
         try:
             result = self._query(query)

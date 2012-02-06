@@ -614,7 +614,7 @@ class Connection(object):
     def autocommit(self, value):
         ''' Set whether or not to commit after every execute() '''
         try:
-            self._execute_command(COM_QUERY, "SET AUTOCOMMIT = %s" % \
+            self._execute_command(COM_QUERY, b"SET AUTOCOMMIT = " +
                                       self.escape(value))
             self.read_packet()
         except:
@@ -709,7 +709,7 @@ class Connection(object):
     def set_charset(self, charset):
         try:
             if charset:
-                self._execute_command(COM_QUERY, "SET NAMES %s" %
+                self._execute_command(COM_QUERY, b"SET NAMES " +
                                       self.escape(charset))
                 self.read_packet()
                 self.charset = charset

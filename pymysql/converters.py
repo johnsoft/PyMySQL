@@ -21,19 +21,8 @@ ESCAPE_MAP = {'\0': '\\0', '\n': '\\n', '\r': '\\r', '\032': '\\Z',
               '\'': '\\\'', '"': '\\"', '\\': '\\\\'}
 
 def escape_item(val, charset):
-    if type(val) in [tuple, list, set]:
-        return escape_sequence(val, charset)
-    if type(val) is dict:
-        return escape_dict(val, charset)
-    if PYTHON3 and hasattr(val, "decode") and not isinstance(val, unicode):
-        # deal with py3k bytes
-        val = val.decode(charset)
     encoder = encoders[type(val)]
-    val = encoder(val)
-    if type(val) is str:
-        return val
-    val = val.encode(charset)
-    return val
+    return encoder(val, charset)
 
 def escape_dict(val, charset):
     n = {}
@@ -47,55 +36,58 @@ def escape_sequence(val, charset):
     for item in val:
         quoted = escape_item(item, charset)
         n.append(quoted)
-    return "(" + ",".join(n) + ")"
+    return b"(" + b",".join(n) + b")"
 
 def escape_set(val, charset):
     val = map(lambda x: escape_item(x, charset), val)
-    return ','.join(val)
+    return b','.join(val)
 
-def escape_bool(value):
-    return str(int(value))
+def escape_bool(value, charset):
+    return str(int(value)).encode(charset)
 
-def escape_object(value):
-    return str(value)
+def escape_via_str(value, charset):
+    return str(value).encode(charset)
 
-escape_int = escape_long = escape_object
+escape_int = escape_long = escape_via_str
 
-def escape_float(value):
-    return ('%.15g' % value)
+def escape_float(value, charset):
+    return escape_string('%.15g' % value, charset)
 
-def escape_string(value):
-    return ("'%s'" % ESCAPE_REGEX.sub(
+def escape_bytes(value, charset):
+    return escape_string(value.decode('latin-1'), 'latin-1')  # latin-1 is a 1:1 mapping from chars to bytes
+
+def escape_string(value, charset):
+    ret = ("'%s'" % ESCAPE_REGEX.sub(
             lambda match: ESCAPE_MAP.get(match.group(0)), value))
+    return ret.encode(charset)
 
-def escape_unicode(value):
-    return escape_string(value)
+escape_unicode = escape_string
 
 def escape_None(value):
-    return 'NULL'
+    return b'NULL'
 
-def escape_timedelta(obj):
+def escape_timedelta(obj, charset):
     seconds = int(obj.seconds) % 60
     minutes = int(obj.seconds // 60) % 60
     hours = int(obj.seconds // 3600) % 24 + int(obj.days) * 24
-    return escape_string('%02d:%02d:%02d' % (hours, minutes, seconds))
+    return escape_string('%02d:%02d:%02d' % (hours, minutes, seconds), charset)
 
-def escape_time(obj):
+def escape_time(obj, charset):
     s = "%02d:%02d:%02d" % (int(obj.hour), int(obj.minute),
                             int(obj.second))
     if obj.microsecond:
         s += ".%f" % obj.microsecond
 
-    return escape_string(s)
+    return escape_string(s, charset)
 
-def escape_datetime(obj):
-    return escape_string(obj.strftime("%Y-%m-%d %H:%M:%S"))
+def escape_datetime(obj, charset):
+    return escape_string(obj.strftime("%Y-%m-%d %H:%M:%S"), charset)
 
-def escape_date(obj):
-    return escape_string(obj.strftime("%Y-%m-%d"))
+def escape_date(obj, charset):
+    return escape_string(obj.strftime("%Y-%m-%d"), charset)
 
-def escape_struct_time(obj):
-    return escape_datetime(datetime.datetime(*obj[:6]))
+def escape_struct_time(obj, charset):
+    return escape_datetime(datetime.datetime(*obj[:6]), charset)
 
 def convert_datetime(connection, field, obj):
     """Returns a DATETIME or TIMESTAMP column value as a datetime object:
@@ -291,6 +283,7 @@ encoders = {
         int: escape_int,
         long: escape_long,
         float: escape_float,
+        bytes: escape_bytes,
         str: escape_string,
         unicode: escape_unicode,
         tuple: escape_sequence,
